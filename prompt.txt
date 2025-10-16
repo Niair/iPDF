@@ -1,0 +1,2 @@
+"In the table that compares different parsers, what is the WSJ23F1 score for the 'Vinyals & Kaiser et al. (2014)' entry?"
+
