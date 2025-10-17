@@ -11,13 +11,16 @@ from .exception import (
     ValidationError
 )
 from .config_loader import ConfigLoader, get_config
+
+# Import helpers individually to avoid circular imports
 from .helpers import (
     ensure_dir,
     get_file_hash,
     save_object,
     load_object,
     format_file_size,
-    sanitize_filename
+    sanitize_filename,
+    truncate_text
 )
 
 __all__ = [
@@ -37,5 +40,6 @@ __all__ = [
     'save_object',
     'load_object',
     'format_file_size',
-    'sanitize_filename'
+    'sanitize_filename',
+    'truncate_text'
 ]

@@ -6,12 +6,11 @@ import sys
 from pathlib import Path
 
 # Add src to path
-sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
+src_path = Path(__file__).parent.parent / "src"
+sys.path.insert(0, str(src_path))
 
+# Now import after path is set
 from utils.logger import get_logger
-from core.embeddings import EmbeddingGenerator
-from core.vectorstore import VectorStoreManager
-from core.llm_handler import LLMHandler
 
 logger = get_logger(__name__)
 
@@ -19,6 +18,7 @@ def test_ollama_embeddings():
     """Test Ollama embeddings"""
     print("\n🔧 Testing Ollama Embeddings...")
     try:
+        from core.embeddings import EmbeddingGenerator
         gen = EmbeddingGenerator()
         result = gen.test_connection()
         if result:
@@ -35,6 +35,7 @@ def test_ollama_llm():
     """Test Ollama LLM"""
     print("\n🔧 Testing Ollama LLM...")
     try:
+        from core.llm_handler import LLMHandler
         llm = LLMHandler()
         result = llm.test_connection()
         if result:
@@ -51,6 +52,7 @@ def test_qdrant():
     """Test Qdrant vector store"""
     print("\n🔧 Testing Qdrant Vector Store...")
     try:
+        from core.vectorstore import VectorStoreManager
         vector_store = VectorStoreManager()
         result = vector_store.test_connection()
         if result:

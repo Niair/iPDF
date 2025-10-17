@@ -1,162 +1,136 @@
 """
-Configuration Loader
-Loads and validates YAML configuration with environment-specific overrides
+Helper Utility Functions
+Common utility functions used across the application
 """
+import hashlib
 import os
 import sys
 from pathlib import Path
-from typing import Any, Dict, Optional
-import yaml
-from pydantic import BaseModel, Field
-from dotenv import load_dotenv
+from typing import Union, Any
+import dill
+import pickle
 
 from utils.logger import get_logger
-from utils.exception import ConfigurationError
+from utils.exception import IPDFException
 
 logger = get_logger(__name__)
 
 
-class AppConfig(BaseModel):
-    """Application configuration schema"""
-    name: str
-    version: str
-    description: str
-    max_upload_size_mb: int = 50
-
-
-class LoggingConfig(BaseModel):
-    """Logging configuration schema"""
-    level: str = "INFO"
-    format: str
-    date_format: str
-    file_rotation: Dict[str, int]
-
-
-class DocumentConfig(BaseModel):
-    """Document processing configuration"""
-    extraction_strategy: str = "hi_res"
-    extract_images: bool = True
-    extract_tables: bool = True
-    infer_table_structure: bool = True
-    chunk_size: int = 1000
-    chunk_overlap: int = 200
-    enable_ocr: bool = True
-    ocr_dpi: int = 100
-
-
-class EmbeddingsConfig(BaseModel):
-    """Embeddings configuration"""
-    provider: str = "ollama"
-    model: str = "nomic-embed-text"
-    dimensions: int = 768
-    base_url: str = "http://localhost:11434"
-
-
-class VectorStoreConfig(BaseModel):
-    """Vector store configuration"""
-    provider: str = "qdrant"
-    collection_name: str = "ipdf_multimodal"
-    distance_metric: str = "COSINE"
-    search_limit: int = 5
-    vector_size: int = 768
-
-
-class LLMConfig(BaseModel):
-    """LLM configuration"""
-    provider: str = "ollama"
-    model: str = "llama3.2"
-    temperature: float = 0.1
-    max_tokens: int = 2048
-    base_url: str = "http://localhost:11434"
-
-
-class UIConfig(BaseModel):
-    """UI configuration"""
-    page_title: str = "iPDF - Chat with PDFs"
-    page_icon: str = "📄"
-    layout: str = "wide"
-    sidebar_state: str = "expanded"
-    pdf_viewer_height: int = 800
-    chat_height: int = 600
-    theme: Dict[str, str] = {}
-
-
-class Config(BaseModel):
-    """Main configuration model"""
-    app: AppConfig
-    logging: LoggingConfig
-    document: DocumentConfig
-    embeddings: EmbeddingsConfig
-    vectorstore: VectorStoreConfig
-    llm: LLMConfig
-    ui: UIConfig
+def ensure_dir(directory: Union[str, Path]) -> Path:
+    """
+    Ensure directory exists, create if it doesn't
     
-    class Config:
-        arbitrary_types_allowed = True
+    Args:
+        directory: Directory path
+        
+    Returns:
+        Path object
+    """
+    dir_path = Path(directory)
+    dir_path.mkdir(parents=True, exist_ok=True)
+    return dir_path
 
 
-class ConfigLoader:
-    """Load and manage application configuration"""
+def get_file_hash(file_content: bytes) -> str:
+    """
+    Generate SHA256 hash of file content
     
-    def __init__(self, config_dir: str = "config", environment: Optional[str] = None):
-        """
-        Initialize configuration loader
+    Args:
+        file_content: File content as bytes
         
-        Args:
-            config_dir: Directory containing config files
-            environment: Environment name (development, production, etc.)
-        """
-        load_dotenv()  # Load environment variables
-        
-        self.config_dir = Path(config_dir)
-        self.environment = environment or os.getenv("ENVIRONMENT", "development")
-        self._config: Optional[Config] = None
-        
-        logger.info(f"Loading configuration for environment: {self.environment}")
+    Returns:
+        Hex digest of hash
+    """
+    return hashlib.sha256(file_content).hexdigest()
+
+
+def save_object(obj: Any, file_path: Union[str, Path]) -> None:
+    """
+    Save Python object to file using dill
     
-    def load(self) -> Config:
-        """
-        Load configuration from YAML files
+    Args:
+        obj: Object to save
+        file_path: Path to save file
+    """
+    try:
+        file_path = Path(file_path)
+        ensure_dir(file_path.parent)
         
-        Returns:
-            Validated configuration object
-        """
-        try:
-            # Load base configuration
-            base_config = self._load_yaml(self.config_dir / "config.yaml")
-            
-            # Validate and create config object
-            self._config = Config(**base_config)
-            
-            logger.info("Configuration loaded successfully")
-            return self._config
+        with open(file_path, 'wb') as f:
+            dill.dump(obj, f)
         
-        except Exception as e:
-            raise ConfigurationError(f"Failed to load configuration: {str(e)}", sys)
+        logger.info(f"Object saved to {file_path}")
     
-    def _load_yaml(self, file_path: Path) -> Dict[str, Any]:
-        """Load YAML file"""
-        try:
-            with open(file_path, 'r') as f:
-                return yaml.safe_load(f)
-        except Exception as e:
-            raise ConfigurationError(f"Failed to load {file_path}: {str(e)}", sys)
+    except Exception as e:
+        raise IPDFException(f"Failed to save object: {str(e)}", sys)
+
+
+def load_object(file_path: Union[str, Path]) -> Any:
+    """
+    Load Python object from file
     
-    @property
-    def config(self) -> Config:
-        """Get loaded configuration"""
-        if self._config is None:
-            self._config = self.load()
-        return self._config
+    Args:
+        file_path: Path to file
+        
+    Returns:
+        Loaded object
+    """
+    try:
+        with open(file_path, 'rb') as f:
+            obj = pickle.load(f)
+        
+        logger.info(f"Object loaded from {file_path}")
+        return obj
+    
+    except Exception as e:
+        raise IPDFException(f"Failed to load object: {str(e)}", sys)
 
 
-# Global config instance
-_config_loader: Optional[ConfigLoader] = None
+def format_file_size(size_bytes: int) -> str:
+    """
+    Format file size in human-readable format
+    
+    Args:
+        size_bytes: Size in bytes
+        
+    Returns:
+        Formatted string (e.g., "1.5 MB")
+    """
+    for unit in ['B', 'KB', 'MB', 'GB']:
+        if size_bytes < 1024.0:
+            return f"{size_bytes:.1f} {unit}"
+        size_bytes /= 1024.0
+    return f"{size_bytes:.1f} TB"
 
 
-def get_config() -> Config:
-    """Get global configuration instance"""
-    global _config_loader
-    if _config_loader is None:
-        _config_loader = ConfigLoader()
-    return _config_loader.config
+def sanitize_filename(filename: str) -> str:
+    """
+    Sanitize filename by removing/replacing invalid characters
+    
+    Args:
+        filename: Original filename
+        
+    Returns:
+        Sanitized filename
+    """
+    invalid_chars = '<>:"/\\|?*'
+    for char in invalid_chars:
+        filename = filename.replace(char, '_')
+    return filename
+
+
+def truncate_text(text: str, max_length: int = 100, suffix: str = "...") -> str:
+    """
+    Truncate text to maximum length
+    
+    Args:
+        text: Text to truncate
+        max_length: Maximum length
+        suffix: Suffix to add if truncated
+        
+    Returns:
+        Truncated text
+    """
+    if len(text) <= max_length:
+        return text
+    return text[:max_length - len(suffix)] + suffix
