@@ -1,0 +1,82 @@
+/* Custom styles for iPDF */
+
+/* Main container */
+.main {
+    padding: 1rem 2rem;
+}
+
+/* Sidebar */
+.css-1d391kg {
+    background-color: #f8f9fa;
+}
+
+/* Chat messages */
+.stChatMessage {
+    padding: 1rem;
+    border-radius: 0.5rem;
+    margin-bottom: 1rem;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+/* User message */
+.stChatMessage[data-testid="user"] {
+    background-color: #e3f2fd;
+}
+
+/* Assistant message */
+.stChatMessage[data-testid="assistant"] {
+    background-color: #f1f8e9;
+}
+
+/* PDF viewer container */
+.pdf-container {
+    border: 1px solid #e0e0e0;
+    border-radius: 0.5rem;
+    padding: 1rem;
+    background-color: #ffffff;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+/* Buttons */
+.stButton button {
+    border-radius: 0.3rem;
+    font-weight: 500;
+}
+
+/* Primary button */
+.stButton button[kind="primary"] {
+    background-color: #1f77b4;
+    color: white;
+}
+
+/* Copy button */
+.copy-button {
+    float: right;
+    font-size: 0.8rem;
+    padding: 0.2rem 0.5rem;
+    border-radius: 0.2rem;
+    background-color: #e0e0e0;
+    border: none;
+    cursor: pointer;
+}
+
+.copy-button:hover {
+    background-color: #d0d0d0;
+}
+
+/* File uploader */
+.stFileUploader {
+    padding: 1rem;
+    border: 2px dashed #cccccc;
+    border-radius: 0.5rem;
+}
+
+/* Progress bar */
+.stProgress > div > div {
+    background-color: #1f77b4;
+}
+
+/* Expander */
+.streamlit-expanderHeader {
+    font-weight: 600;
+}

@@ -1,0 +1,28 @@
+# Qdrant Vector Database Configuration (FREE Tier)
+
+# Cloud Configuration (Recommended - No Credit Card Required)
+cloud:
+  url: "${QDRANT_URL}"  # From .env
+  api_key: "${QDRANT_API_KEY}"  # From .env
+  prefer_grpc: false
+  timeout: 60
+  
+# Local Docker Configuration (Alternative - For Development)
+local:
+  host: "localhost"
+  port: 6333
+  grpc_port: 6334
+  
+# Collection Settings
+collection:
+  name: "ipdf_multimodal"
+  vector_config:
+    size: 768
+    distance: "Cosine"
+  optimizers_config:
+    memmap_threshold: 20000
+  quantization_config:
+    scalar:
+      type: "int8"
+      quantile: 0.99
+      always_ram: true
