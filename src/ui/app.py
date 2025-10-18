@@ -303,21 +303,31 @@ def render_pdf_viewer():
 
 # ==================== CHAT INTERFACE ====================
 def render_chat_interface():
-    """Render chat interface"""
+    """Render improved chat interface"""
     st.markdown("### 💬 Chat")
     
     if not st.session_state.processed_files:
         st.info("👈 Upload and process PDFs first")
         return
     
+    # Show currently loaded documents
+    st.caption(f"📚 Loaded documents: {', '.join(st.session_state.processed_files)}")
+    
     # Chat container
-    chat_container = st.container(height=400)
+    chat_container = st.container(height=450)
     
     with chat_container:
         if not st.session_state.chat_history:
-            st.info("💬 Ask a question about your documents!")
+            st.info("""💬 **Ask me anything about your documents!**
+            
+            Examples:
+            • "What is this document about?"
+            • "Summarize the main points"
+            • "Who is Nihal Kumar?"
+            • "Tell me about the projects mentioned"
+            """)
         else:
-            for msg in st.session_state.chat_history:
+            for idx, msg in enumerate(st.session_state.chat_history):
                 if msg['role'] == 'user':
                     with st.chat_message("user"):
                         st.write(msg['content'])
@@ -325,21 +335,39 @@ def render_chat_interface():
                     with st.chat_message("assistant"):
                         st.markdown(msg['content'])
                         
-                        # Show sources
+                        # Show processing time
+                        if 'processing_time' in msg:
+                            st.caption(f"⏱️ {msg['processing_time']:.2f}s")
+                        
+                        # Copy button
+                        if st.button("📋 Copy", key=f"copy_{idx}"):
+                            st.code(msg['content'], language=None)
+                        
+                        # Show sources with relevance scores
                         if 'sources' in msg and msg['sources']:
-                            with st.expander("📚 Sources"):
+                            with st.expander(f"📚 {len(msg['sources'])} Sources"):
                                 for src in msg['sources']:
-                                    st.text(f"📄 {src['filename']} (Page {src['page']}) - Score: {src['score']:.3f}")
+                                    relevance = src['score']
+                                    relevance_color = "🟢" if relevance > 0.7 else "🟡" if relevance > 0.5 else "🟠"
+                                    st.text(
+                                        f"{relevance_color} {src['filename']} (Page {src['page']}) "
+                                        f"- Relevance: {relevance:.1%}"
+                                    )
     
-    # Input
-    user_query = st.chat_input("Ask about your documents...")
+    st.divider()
+    
+    # Input area with helpful placeholder
+    user_query = st.chat_input(
+        "Ask about your documents... (e.g., 'What are the key points?')",
+        key="chat_input"
+    )
     
     if user_query:
         handle_chat(user_query)
 
 
 def handle_chat(query: str):
-    """Handle chat query"""
+    """Handle chat query with better error handling"""
     try:
         # Add user message
         st.session_state.chat_history.append({
@@ -347,11 +375,11 @@ def handle_chat(query: str):
             'content': query
         })
         
-        # Get response
-        with st.spinner("🤔 Thinking..."):
+        # Show thinking indicator
+        with st.spinner("🤔 Analyzing documents..."):
             response = st.session_state.chat_service.chat(
                 query=query,
-                filename=None,  # Search all PDFs
+                filename=None,
                 use_rag=True
             )
         
@@ -359,15 +387,21 @@ def handle_chat(query: str):
         st.session_state.chat_history.append({
             'role': 'assistant',
             'content': response.answer,
-            'sources': response.sources
+            'sources': response.sources,
+            'processing_time': response.processing_time
         })
         
         st.rerun()
         
     except Exception as e:
-        st.error(f"❌ Chat error: {str(e)}")
+        error_msg = f"❌ **Error:** {str(e)}\n\nPlease try rephrasing your question or check if the documents are properly processed."
+        st.session_state.chat_history.append({
+            'role': 'assistant',
+            'content': error_msg,
+            'sources': []
+        })
         logger.error(f"Chat error: {str(e)}")
-
+        st.rerun()
 
 # ==================== MAIN APP ====================
 def main():

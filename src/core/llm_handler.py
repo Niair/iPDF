@@ -1,5 +1,6 @@
 """
 LLM Handler using Ollama (100% FREE)
+UPDATED with better prompts and greeting handling
 """
 import sys
 from typing import Optional, Dict, Any, Generator
@@ -126,7 +127,7 @@ class LLMHandler:
         chat_history: Optional[list] = None
     ) -> str:
         """
-        Generate response with context (for RAG)
+        Generate response with context (for RAG) - IMPROVED VERSION
         
         Args:
             query: User query
@@ -136,21 +137,39 @@ class LLMHandler:
         Returns:
             Generated response
         """
-        system_prompt = """You are a helpful AI assistant that answers questions based on the provided context from PDF documents.
-
-Guidelines:
-1. Answer based ONLY on the provided context
-2. If the answer is not in the context, say "I don't have enough information to answer that"
-3. Preserve formatting for tables, formulas, and lists
-4. Cite specific parts of the context when relevant
-5. Be concise but thorough"""
+        # Handle greetings and casual queries
+        casual_queries = ['hi', 'hello', 'hey', 'yo', 'sup', 'greetings', 'howdy']
+        if query.lower().strip() in casual_queries:
+            return "Hello! 👋 I'm your PDF assistant. I can help you find information from your uploaded documents. What would you like to know?"
         
-        prompt = f"""Context from documents:
+        system_prompt = """You are an intelligent PDF assistant helping users understand their documents.
+
+**Your Role:**
+- Answer questions based ONLY on the provided context from documents
+- Be specific and cite relevant details
+- Use clear formatting with bullet points for lists
+- Mention page numbers when relevant
+
+**Response Guidelines:**
+1. If the answer is in the context: Provide a detailed, well-structured answer
+2. If the answer is NOT in the context: Say "I couldn't find information about that in your documents."
+3. For general questions about the document: Provide a comprehensive summary
+4. Always be helpful and professional
+
+**Formatting:**
+- Use **bold** for important terms
+- Use bullet points (•) for lists
+- Keep answers concise but thorough
+- Add spacing between sections for readability"""
+        
+        prompt = f"""**Context from Documents:**
 {context}
 
-User Question: {query}
+---
 
-Please provide a detailed answer based on the context above."""
+**User Question:** {query}
+
+**Instructions:** Based on the context above, provide a clear and helpful answer. If the information isn't in the context, say so politely."""
         
         return self.generate(prompt, system_prompt)
     
@@ -162,7 +181,7 @@ Please provide a detailed answer based on the context above."""
             True if connection successful
         """
         try:
-            response = self.generate("Hello, test message")
+            response = self.generate("Hello")
             logger.info("✅ Ollama LLM service is working")
             return True
         
