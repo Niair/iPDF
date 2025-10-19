@@ -119,7 +119,10 @@ class LLMHandler:
             temperature=0.1,
             max_tokens=2048
         )
-        return response.choices.message.content
+        # FIX: choices is a LIST, need [0] to get first choice
+        return response.choices[0].message.content
+
+
     
     def generate_with_context(self, query: str, context: str) -> str:
         """Generate with RAG context"""

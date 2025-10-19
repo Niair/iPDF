@@ -55,7 +55,7 @@ class QueryService:
             
             # Search vector store (get more results than needed for filtering)
             all_results = self.vector_store.search(
-                query_vector=query_embedding,
+                query_embedding=query_embedding,
                 limit=limit * 3,  # Get 3x more to filter out low-quality results
                 filter_dict=filter_dict
             )

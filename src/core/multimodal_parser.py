@@ -172,7 +172,7 @@ class MultimodalProcessor:
             try:
                 elements_raw = partition_pdf(
                     filename=file_path,
-                    strategy="hi_res",  # High resolution for better image/table extraction
+                    strategy="fast",  # High resolution for better image/table extraction
                     infer_table_structure=True,
                     extract_images_in_pdf=self.extract_images,
                     extract_image_block_types=["Image", "Table"] if self.extract_images else []
