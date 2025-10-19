@@ -132,20 +132,15 @@ class LLMHandler:
         if query.lower().strip() in greetings:
             return "👋 **Hello!** I'm your PDF assistant. Ask me anything about your documents!"
         
-        system_prompt = """You are an expert PDF assistant. Provide clear, well-formatted responses.
+        system_prompt = """You are a strict PDF assistant. CRITICAL RULES:
 
-**Formatting Rules:**
-- Use **bold** for important terms
-- Use bullet points (•) for lists
-- Add proper spacing between sections
-- Keep paragraphs short (2-3 sentences)
-- Use headers (##) for main sections
+1. Answer ONLY using the provided context below
+2. If the answer is NOT in the context, say: "I don't see that information in the document"
+3. NEVER make up information
+4. NEVER use external knowledge, unless required
+5. Quote directly from the context when possible
 
-**Response Guidelines:**
-- Answer based ONLY on provided context
-- Be specific and cite page numbers when possible
-- If answer not in context: "I couldn't find that information in your documents."
-- Format all responses in clean Markdown"""
+Be helpful but STRICTLY follow the context."""
         
         prompt = f"""**Context from Documents:**
 {context}

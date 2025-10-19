@@ -66,10 +66,10 @@ class QueryService:
                 if result['score'] >= min_score
             ][:limit]  # Take top N after filtering
             
-            logger.info(
-                f"Found {len(filtered_results)} high-quality results "
-                f"(filtered from {len(all_results)} total)"
-            )
+            logger.info(f"Search results for '{query}':")
+            for idx, result in enumerate(filtered_results):
+                logger.info(f"  {idx+1}. Score: {result['score']:.3f}")
+                logger.info(f"     Content preview: {result['payload']['content'][:100]}...")
             
             return filtered_results
         
