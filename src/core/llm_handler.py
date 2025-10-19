@@ -1,166 +1,148 @@
 """
-LLM Handler using Ollama (100% FREE)
-UPDATED with better prompts and greeting handling
+LLM Handler - Switchable between Google Gemini and Groq
 """
 import sys
-from typing import Optional, Dict, Any, Generator
-import ollama
+import os
+from typing import Optional
+from dotenv import load_dotenv
+
+load_dotenv()
 
 from utils.logger import get_logger
 from utils.exception import LLMError
-from utils.config_loader import get_config
 
 logger = get_logger(__name__)
 
 
 class LLMHandler:
-    """Handle LLM interactions using Ollama"""
+    """LLM Handler supporting multiple providers"""
     
-    def __init__(self, model: Optional[str] = None, base_url: Optional[str] = None):
+    def __init__(self, provider: str = "google"):
         """
         Initialize LLM handler
         
         Args:
-            model: LLM model name (default: llama3.2)
-            base_url: Ollama base URL
+            provider: "google" or "groq"
         """
-        config = get_config()
-        self.model = model or config.llm.model
-        self.base_url = base_url or config.llm.base_url
-        self.temperature = config.llm.temperature
-        self.max_tokens = config.llm.max_tokens
+        self.provider = provider
+        self.client = None
+        self.model = None
         
-        # Initialize Ollama client
-        self.client = ollama.Client(host=self.base_url)
+        logger.info(f"Initializing LLMHandler with provider: {provider}")
         
-        logger.info(f"LLMHandler initialized with model: {self.model}")
+        if provider == "google":
+            if not self._init_google():
+                raise LLMError("Google Gemini initialization failed")
+        elif provider == "groq":
+            if not self._init_groq():
+                raise LLMError("Groq initialization failed")
+        else:
+            raise LLMError(f"Unknown provider: {provider}")
+        
+        logger.info(f"✅ LLMHandler ready with {provider}")
+    
+    def _init_google(self) -> bool:
+        """Initialize Google Gemini"""
+        try:
+            import google.generativeai as genai
+            
+            api_key = os.getenv("GOOGLE_API_KEY")
+            if not api_key:
+                logger.error("GOOGLE_API_KEY not set")
+                return False
+            
+            genai.configure(api_key=api_key)
+            model_name = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+            self.model = genai.GenerativeModel(model_name)
+            
+            # Test
+            response = self.model.generate_content("test")
+            logger.info(f"✅ Google Gemini ({model_name}) connected")
+            return True
+        
+        except Exception as e:
+            logger.error(f"Google init failed: {str(e)}")
+            return False
+    
+    def _init_groq(self) -> bool:
+        """Initialize Groq"""
+        try:
+            from groq import Groq
+            
+            api_key = os.getenv("GROQ_API_KEY")
+            if not api_key:
+                logger.error("GROQ_API_KEY not set")
+                return False
+            
+            self.client = Groq(api_key=api_key)
+            self.model = os.getenv("GROQ_MODEL", "openai/gpt-oss-20b")
+            
+            # Test
+            response = self.client.chat.completions.create(
+                model=self.model,
+                messages=[{"role": "user", "content": "test"}],
+                max_tokens=10
+            )
+            logger.info(f"✅ Groq ({self.model}) connected")
+            return True
+        
+        except Exception as e:
+            logger.error(f"Groq init failed: {str(e)}")
+            return False
     
     def generate(self, prompt: str, system_prompt: Optional[str] = None) -> str:
-        """
-        Generate response from LLM
-        
-        Args:
-            prompt: User prompt
-            system_prompt: Optional system prompt
-            
-        Returns:
-            Generated response text
-        """
+        """Generate response"""
         try:
-            messages = []
-            
-            if system_prompt:
-                messages.append({
-                    "role": "system",
-                    "content": system_prompt
-                })
-            
-            messages.append({
-                "role": "user",
-                "content": prompt
-            })
-            
-            response = self.client.chat(
-                model=self.model,
-                messages=messages,
-                options={
-                    "temperature": self.temperature,
-                    "num_predict": self.max_tokens
-                }
-            )
-            
-            return response['message']['content']
-        
+            if self.provider == "google":
+                return self._generate_google(prompt, system_prompt)
+            else:  # groq
+                return self._generate_groq(prompt, system_prompt)
         except Exception as e:
-            raise LLMError(f"Failed to generate response: {str(e)}", sys)
+            raise LLMError(f"Generation failed: {str(e)}", sys)
     
-    def generate_stream(
-        self,
-        prompt: str,
-        system_prompt: Optional[str] = None
-    ) -> Generator[str, None, None]:
-        """
-        Generate streaming response from LLM
-        
-        Args:
-            prompt: User prompt
-            system_prompt: Optional system prompt
-            
-        Yields:
-            Response chunks
-        """
-        try:
-            messages = []
-            
-            if system_prompt:
-                messages.append({
-                    "role": "system",
-                    "content": system_prompt
-                })
-            
-            messages.append({
-                "role": "user",
-                "content": prompt
-            })
-            
-            stream = self.client.chat(
-                model=self.model,
-                messages=messages,
-                stream=True,
-                options={
-                    "temperature": self.temperature,
-                    "num_predict": self.max_tokens
-                }
-            )
-            
-            for chunk in stream:
-                if 'message' in chunk and 'content' in chunk['message']:
-                    yield chunk['message']['content']
-        
-        except Exception as e:
-            raise LLMError(f"Failed to generate streaming response: {str(e)}", sys)
+    def _generate_google(self, prompt: str, system_prompt: Optional[str] = None) -> str:
+        """Generate with Google Gemini"""
+        full_prompt = f"{system_prompt}\n\n{prompt}" if system_prompt else prompt
+        response = self.model.generate_content(full_prompt)
+        return response.text
     
-    def generate_with_context(
-        self,
-        query: str,
-        context: str,
-        chat_history: Optional[list] = None
-    ) -> str:
-        """
-        Generate response with context (for RAG) - IMPROVED VERSION
+    def _generate_groq(self, prompt: str, system_prompt: Optional[str] = None) -> str:
+        """Generate with Groq"""
+        messages = []
+        if system_prompt:
+            messages.append({"role": "system", "content": system_prompt})
+        messages.append({"role": "user", "content": prompt})
         
-        Args:
-            query: User query
-            context: Retrieved context from vector store
-            chat_history: Optional chat history
-            
-        Returns:
-            Generated response
-        """
-        # Handle greetings and casual queries
-        casual_queries = ['hi', 'hello', 'hey', 'yo', 'sup', 'greetings', 'howdy']
-        if query.lower().strip() in casual_queries:
-            return "Hello! 👋 I'm your PDF assistant. I can help you find information from your uploaded documents. What would you like to know?"
+        response = self.client.chat.completions.create(
+            model=self.model,
+            messages=messages,
+            temperature=0.1,
+            max_tokens=2048
+        )
+        return response.choices.message.content
+    
+    def generate_with_context(self, query: str, context: str) -> str:
+        """Generate with RAG context"""
         
-        system_prompt = """You are an intelligent PDF assistant helping users understand their documents.
+        # Handle greetings
+        greetings = ['hi', 'hello', 'hey', 'yo', 'sup']
+        if query.lower().strip() in greetings:
+            return "👋 **Hello!** I'm your PDF assistant. Ask me anything about your documents!"
+        
+        system_prompt = """You are an expert PDF assistant. Provide clear, well-formatted responses.
 
-**Your Role:**
-- Answer questions based ONLY on the provided context from documents
-- Be specific and cite relevant details
-- Use clear formatting with bullet points for lists
-- Mention page numbers when relevant
-
-**Response Guidelines:**
-1. If the answer is in the context: Provide a detailed, well-structured answer
-2. If the answer is NOT in the context: Say "I couldn't find information about that in your documents."
-3. For general questions about the document: Provide a comprehensive summary
-4. Always be helpful and professional
-
-**Formatting:**
+**Formatting Rules:**
 - Use **bold** for important terms
 - Use bullet points (•) for lists
-- Keep answers concise but thorough
-- Add spacing between sections for readability"""
+- Add proper spacing between sections
+- Keep paragraphs short (2-3 sentences)
+- Use headers (##) for main sections
+
+**Response Guidelines:**
+- Answer based ONLY on provided context
+- Be specific and cite page numbers when possible
+- If answer not in context: "I couldn't find that information in your documents."
+- Format all responses in clean Markdown"""
         
         prompt = f"""**Context from Documents:**
 {context}
@@ -169,22 +151,18 @@ class LLMHandler:
 
 **User Question:** {query}
 
-**Instructions:** Based on the context above, provide a clear and helpful answer. If the information isn't in the context, say so politely."""
+**Instructions:** Provide a well-formatted, structured answer based on the context above."""
         
         return self.generate(prompt, system_prompt)
     
     def test_connection(self) -> bool:
-        """
-        Test connection to Ollama
-        
-        Returns:
-            True if connection successful
-        """
+        """Test connection"""
         try:
-            response = self.generate("Hello")
-            logger.info("✅ Ollama LLM service is working")
+            self.generate("test")
             return True
-        
-        except Exception as e:
-            logger.error(f"❌ Ollama LLM connection failed: {str(e)}")
+        except:
             return False
+    
+    def get_provider(self) -> str:
+        """Get current provider"""
+        return self.provider

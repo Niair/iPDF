@@ -1,10 +1,9 @@
 """
-Chat Service - Handle conversational interactions
-UPDATED with better error handling and response quality
+Chat Service - FAST responses (1-3 seconds target)
 """
 import sys
-from typing import Optional, Dict, Any
 import time
+from typing import Optional
 
 from utils.logger import get_logger
 from utils.exception import LLMError
@@ -16,82 +15,53 @@ logger = get_logger(__name__)
 
 
 class ChatService:
-    """Service for chat interactions with improved response quality"""
+    """Fast chat service"""
     
-    def __init__(self):
-        """Initialize chat service"""
-        self.llm = LLMHandler()
+    def __init__(self, llm_provider: str = "groq"):
+        """Initialize with fast LLM"""
+        self.llm = LLMHandler(provider=llm_provider)
         self.query_service = QueryService()
-        logger.info("ChatService initialized")
+        logger.info(f"ChatService initialized with {llm_provider}")
     
-    def chat(
-        self, 
-        query: str, 
-        filename: Optional[str] = None, 
-        use_rag: bool = True
-    ) -> ChatResponse:
-        """
-        Handle chat query with RAG and improved responses
-        
-        Args:
-            query: User query
-            filename: Optional filter by specific filename
-            use_rag: Whether to use retrieval augmented generation
-            
-        Returns:
-            ChatResponse with answer and sources
-        """
+    def chat(self, query: str, filename: Optional[str] = None, use_rag: bool = True) -> ChatResponse:
+        """Handle chat - OPTIMIZED for speed"""
         try:
             start_time = time.time()
             
-            logger.info(f"Processing query: '{query}' (RAG: {use_rag})")
-            
             if use_rag:
-                # Retrieve relevant context from documents
+                # Fast context retrieval (< 0.2s)
                 context = self.query_service.get_context_for_query(
                     query,
-                    limit=5,  # Get top 5 most relevant chunks
+                    limit=3,  # Reduced for speed
                     filename=filename
                 )
                 
-                # Generate response with context
+                # Fast LLM response (0.5-1.5s with Groq)
                 answer = self.llm.generate_with_context(query, context)
                 
-                # Get sources for citation
-                search_results = self.query_service.search(
-                    query, 
-                    limit=3,  # Show top 3 sources
-                    filename=filename
-                )
-                
+                # Get sources
+                search_results = self.query_service.search(query, limit=3, filename=filename)
                 sources = [
                     {
-                        "filename": result['payload']['filename'],
-                        "page": result['payload']['page_number'],
-                        "score": result['score']
+                        "filename": r['payload']['filename'],
+                        "page": r['payload']['page_number'],
+                        "score": r['score']
                     }
-                    for result in search_results
+                    for r in search_results
                 ]
             else:
-                # Generate without RAG (direct LLM response)
                 answer = self.llm.generate(query)
                 sources = []
             
             processing_time = time.time() - start_time
-            
-            logger.info(f"Response generated in {processing_time:.2f}s")
+            logger.info(f"✅ Response in {processing_time:.2f}s")
             
             return ChatResponse(
                 answer=answer,
                 sources=sources,
-                metadata={
-                    "rag_used": use_rag, 
-                    "filename_filter": filename,
-                    "num_sources": len(sources)
-                },
+                metadata={},
                 processing_time=processing_time
             )
         
         except Exception as e:
-            logger.error(f"Chat error: {str(e)}")
             raise LLMError(f"Chat failed: {str(e)}", sys)
