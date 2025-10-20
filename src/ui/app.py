@@ -27,6 +27,19 @@ import fitz
 
 logger = get_logger(__name__)
 
+# ============== GLOBAL STYLES ==============
+def inject_global_styles():
+    """Load and inject custom CSS for the app."""
+    try:
+        styles_path = Path(__file__).parent / "styles" / "custom.css"
+        if styles_path.exists():
+            css = styles_path.read_text(encoding="utf-8")
+            st.markdown(f"<style>{css}</style>", unsafe_allow_html=True)
+        else:
+            logger.warning(f"Custom CSS not found at: {styles_path}")
+    except Exception as e:
+        logger.warning(f"Failed to inject CSS: {str(e)}")
+
 
 # ==================== SESSION STATE ====================
 def initialize_session_state():
@@ -244,6 +257,9 @@ def process_pdfs(uploaded_files):
                 if success:
                     if uploaded_file.name not in st.session_state.processed_files:
                         st.session_state.processed_files.append(uploaded_file.name)
+                    # Set the first successfully processed file as current if none selected
+                    if not st.session_state.current_pdf:
+                        st.session_state.current_pdf = uploaded_file.name
                     
                     with log_expander:
                         st.success(f"✅ Successfully processed: {uploaded_file.name}")
@@ -372,28 +388,67 @@ def render_chat_interface():
                         if 'sources' in msg and msg['sources']:
                             with st.expander(f"📚 {len(msg['sources'])} Sources"):
                                 for src in msg['sources']:
-                                    st.text(f"📄 {src['filename']} (Page {src['page']}) - {src['score']:.0%}")
+                                    st.markdown(
+                                        f"<span class='source-chip'><span class='dot'></span>"
+                                        f"{src['filename']} — p.{src['page']} · {int(src['score']*100)}%</span>",
+                                        unsafe_allow_html=True
+                                    )
     
     st.divider()
     
     # Quick actions
+    st.markdown("#### 🎯 Quick Actions")
     col1, col2, col3, col4 = st.columns(4)
-    
+
     with col1:
         if st.button("📝 Summarize", use_container_width=True):
-            handle_chat("Provide a comprehensive summary")
-    
+            enhanced_query = """Create a comprehensive summary of the document including:
+    1. Main topics and themes discussed
+    2. Key findings, arguments, or claims
+    3. Important data, examples, or evidence presented
+    4. Main conclusions or recommendations
+
+    Organize your summary with clear headers and bullet points. Cite page numbers."""
+            handle_chat(enhanced_query)
+
     with col2:
         if st.button("🎯 Key Points", use_container_width=True):
-            handle_chat("What are the key points?")
-    
+            enhanced_query = """Extract and list the most important key points from the document.
+
+    For each key point:
+    • State the point clearly
+    • Provide brief explanation or context
+    • Include the page number where it's found
+
+    Format as a numbered or bulleted list."""
+            handle_chat(enhanced_query)
+
     with col3:
         if st.button("📊 Topics", use_container_width=True):
-            handle_chat("What are the main topics?")
-    
+            enhanced_query = """Identify and describe the main topics covered in this document.
+
+    For each topic provide:
+    • Topic name/title
+    • Brief description (2-3 sentences)
+    • Key points or subtopics
+    • Relevant page numbers
+
+    Use clear headers for each topic."""
+            handle_chat(enhanced_query)
+
     with col4:
         if st.button("🔍 Details", use_container_width=True):
-            handle_chat("Give detailed information")
+            enhanced_query = """Provide detailed information from the document covering:
+
+    • Methodologies or approaches used
+    • Specific data, statistics, or measurements
+    • Technical details or specifications 
+    • Examples, case studies, or applications
+    • Formulas, equations, or models (if any)
+
+    Organize by topic with clear headers. Include page references."""
+            handle_chat(enhanced_query)
+
     
     # Chat input
     user_query = st.chat_input("Ask about your documents...")
@@ -411,9 +466,11 @@ def handle_chat(query: str):
         })
         
         with st.spinner("Thinking..."):
+            # Scope retrieval to the currently selected PDF to avoid cross-document mixing
+            current_filename = st.session_state.get('current_pdf')
             response = st.session_state.chat_service.chat(
                 query=query,
-                filename=None,
+                filename=current_filename,
                 use_rag=True
             )
         
@@ -433,6 +490,8 @@ def handle_chat(query: str):
 # ==================== MAIN ====================
 def main():
     """Main"""
+    # Inject CSS once at app start
+    inject_global_styles()
     initialize_session_state()
     
     if not st.session_state.services_ready:
@@ -440,7 +499,21 @@ def main():
         return
     
     st.title("📄 iPDF - Chat with Your PDFs")
-    st.markdown("**100% FREE** • Powered by Groq & Qdrant")
+    st.markdown(
+        """
+<div style="padding: 10px 14px; border: 1px solid var(--chip-border); border-radius: 14px; background: linear-gradient(180deg,#0f1628,#0c1322); box-shadow: var(--shadow);">
+  <div style="display:flex; align-items:center; gap:12px;">
+    <div style="font-size:22px; font-weight:600;">Chat with Your PDFs</div>
+    <div style="padding:4px 10px; border:1px solid var(--chip-border); border-radius:999px; background:var(--chip); color:var(--text); font-size:12px;">100% Free</div>
+    <div style="padding:4px 10px; border:1px solid var(--chip-border); border-radius:999px; background:var(--chip); color:var(--text); font-size:12px;">Groq + Qdrant</div>
+  </div>
+  <div style="color: var(--muted); margin-top:4px;">
+    Upload PDFs, process them, and ask questions with source-cited answers.
+  </div>
+</div>
+        """,
+        unsafe_allow_html=True,
+    )
     
     render_sidebar()
     

@@ -7,7 +7,15 @@ import uuid
 from typing import List, Dict, Any, Optional
 
 from qdrant_client import QdrantClient
-from qdrant_client.models import Distance, VectorParams, PointStruct
+from qdrant_client.models import (
+    Distance,
+    VectorParams,
+    PointStruct,
+    Filter,
+    FieldCondition,
+    MatchValue,
+    PayloadSchemaType,
+)
 
 from utils.logger import get_logger
 from utils.exception import VectorStoreError
@@ -43,6 +51,8 @@ class VectorStoreManager:
 
             # Ensure collection exists with correct dimensions
             self._ensure_collection()
+            # Ensure payload indexes used by filters exist
+            self._ensure_payload_indexes()
 
         except Exception as e:
             raise VectorStoreError(f"Failed to initialize Qdrant: {str(e)}", sys)
@@ -52,9 +62,10 @@ class VectorStoreManager:
         expected_dim = 384  # Match your embedding model
 
         try:
-            # Try to get existing collection info
+            # Try to get existing collection info (robust to client typing)
             info = self.client.get_collection(self.collection_name)
-            existing_dim = info.config.params.vectors.size
+            vectors_obj = getattr(getattr(getattr(info, "config", None), "params", None), "vectors", None)
+            existing_dim = getattr(vectors_obj, "size", None)
             logger.info(f"Existing collection: {self.collection_name} ({existing_dim} dimensions)")
 
             if existing_dim != expected_dim:
@@ -90,6 +101,36 @@ class VectorStoreManager:
                 )
             )
             logger.info(f"✅ Created collection ({expected_dim} dimensions)")
+
+    def _ensure_payload_indexes(self) -> None:
+        """Create payload indexes required for filtering (idempotent)."""
+        try:
+            # filename: keyword index
+            try:
+                self.client.create_payload_index(
+                    collection_name=self.collection_name,
+                    field_name="filename",
+                    field_schema=PayloadSchemaType.KEYWORD,
+                )
+                logger.info("✅ Created payload index for 'filename' (KEYWORD)")
+            except Exception:
+                # Index may already exist; avoid noisy logs
+                logger.debug("Payload index for 'filename' already exists")
+
+            # page_number: integer index (optional, helps sorting/filtering later)
+            try:
+                self.client.create_payload_index(
+                    collection_name=self.collection_name,
+                    field_name="page_number",
+                    field_schema=PayloadSchemaType.INTEGER,
+                )
+                logger.info("✅ Created payload index for 'page_number' (INTEGER)")
+            except Exception:
+                logger.debug("Payload index for 'page_number' already exists")
+
+        except Exception as e:
+            # Do not hard-fail app launch; searching without index still works except for filtered queries
+            logger.warning(f"⚠️ Failed to ensure payload indexes: {str(e)}")
 
     def add_points(self, embeddings: List[List[float]], payloads: List[Dict[str, Any]]) -> bool:
         """Add vectors to Qdrant"""
@@ -127,17 +168,27 @@ class VectorStoreManager:
         self,
         query_embedding: List[float],
         limit: int = 5,
-        filter_dict: Optional[Dict[str, Any]] = None
+        filter_dict: Optional[Dict[str, Any]] = None,
     ) -> List[Dict[str, Any]]:
         """Search for similar vectors with optional metadata filter"""
         try:
             params = {
                 "collection_name": self.collection_name,
                 "query_vector": query_embedding,
-                "limit": limit
+                "limit": limit,
             }
-            if filter_dict:
-                params["filter"] = filter_dict
+
+            # Build a proper Qdrant filter if filename is provided
+            if filter_dict and "filename" in filter_dict:
+                filename_value = filter_dict["filename"]
+                params["query_filter"] = Filter(
+                    must=[
+                        FieldCondition(
+                            key="filename",
+                            match=MatchValue(value=filename_value),
+                        )
+                    ]
+                )
 
             results = self.client.search(**params)
             return [

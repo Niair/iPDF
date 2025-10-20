@@ -125,33 +125,48 @@ class LLMHandler:
 
     
     def generate_with_context(self, query: str, context: str) -> str:
-        """Generate with RAG context"""
+        """Generate with RAG context - IMPROVED VERSION"""
         
         # Handle greetings
         greetings = ['hi', 'hello', 'hey', 'yo', 'sup']
         if query.lower().strip() in greetings:
             return "👋 **Hello!** I'm your PDF assistant. Ask me anything about your documents!"
         
-        system_prompt = """You are a strict PDF assistant. CRITICAL RULES:
+        # IMPROVED SYSTEM PROMPT - Less strict, more helpful
+        system_prompt = """You are an expert PDF document assistant. Your goal is to provide accurate, helpful answers.
 
-1. Answer ONLY using the provided context below
-2. If the answer is NOT in the context, say: "I don't see that information in the document"
-3. NEVER make up information
-4. NEVER use external knowledge, unless required
-5. Quote directly from the context when possible
+    **Response Strategy:**
+    1. **Primary Source**: Use the provided document context as your main source
+    2. **Synthesis**: Combine information from different parts of the context
+    3. **Clarity**: If context is unclear or incomplete, acknowledge this
+    4. **Format**: Use clear Markdown formatting with headers, bullets, and bold text
 
-Be helpful but STRICTLY follow the context."""
-        
-        prompt = f"""**Context from Documents:**
-{context}
+    **Important Guidelines:**
+    - When context clearly contains the answer → Provide comprehensive response
+    - When context partially contains info → Give what's available and note what's missing  
+    - When context doesn't contain info → Say "I don't find that specific information in the document"
+    - For broad questions (summary, key points) → Synthesize all relevant context
+    - Always cite page numbers when available
+    - Use formatting: **bold**, bullet points (•), headers (##)
 
----
+    Be helpful and thorough while staying grounded in the document."""
 
-**User Question:** {query}
+        # ENHANCED PROMPT with better structure
+        prompt = f"""**DOCUMENT CONTEXT:**
+    {context}
 
-**Instructions:** Provide a well-formatted, structured answer based on the context above."""
+    ---
+
+    **USER QUESTION:** {query}
+
+    **YOUR TASK:**
+    Based on the document context above, provide a well-structured, comprehensive answer. 
+    Use headers, bullet points, and formatting to make your response clear and easy to read.
+    If the question asks for a summary or overview, synthesize information from all relevant parts of the context.
+    """
         
         return self.generate(prompt, system_prompt)
+
     
     def test_connection(self) -> bool:
         """Test connection"""
