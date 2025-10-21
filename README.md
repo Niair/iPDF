@@ -1,3 +1,12 @@
+---
+title: iPDF
+emoji: "📄"
+colorFrom: indigo
+sdk: streamlit
+app_file: src/ui/app.py
+pinned: false
+---
+
 # iPDF - Intelligent PDF Assistant
 
 🚀 An **multimodal** PDF chat application with **RAG (Retrieval Augmented Generation)**. An AI-powered document companion that reads, understands, and highlights insights, risks, and key takeaways from your PDFs. Beyond reading PDFs — it analyzes, explains, and flags what matters most using AI, just upload your PDFs and let AI explain, summarize, and check for insights.
