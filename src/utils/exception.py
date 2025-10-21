@@ -87,3 +87,11 @@ class ConfigurationError(IPDFException):
 class ValidationError(IPDFException):
     """Raised when data validation fails"""
     pass
+
+class QueryError(IPDFException):
+    """Raised when query or search operations fail"""
+    pass
+
+class ChatError(IPDFException):
+    """Raised when chat operations fail"""
+    pass

@@ -1,12 +1,11 @@
 """
-Query Service - Handle vector search with relevance filtering
-UPDATED with better filtering and formatting
+Query Service - With Relevance Filtering
 """
 import sys
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Tuple
 
 from utils.logger import get_logger
-from utils.exception import VectorStoreError
+from utils.exception import QueryError
 from core.embeddings import EmbeddingGenerator
 from core.vectorstore import VectorStoreManager
 
@@ -14,147 +13,106 @@ logger = get_logger(__name__)
 
 
 class QueryService:
-    """Service for querying vector store with improved relevance filtering"""
+    """Query service with relevance filtering"""
     
     def __init__(self):
-        """Initialize query service"""
         self.embedding_gen = EmbeddingGenerator()
         self.vector_store = VectorStoreManager()
-        logger.info("QueryService initialized")
+        logger.info("QueryService initialized (with relevance filtering)")
     
-    def enhance_query(self, query: str) -> str:
-        """Enhance vague queries to get better search results"""
+    def search(
+        self,
+        query: str,
+        limit: int = 5,
+        filename: Optional[str] = None,
+        min_score: float = 0.1  # Relevance threshold (lowered for better retrieval)
+    ) -> List[Dict[str, Any]]:
+        """
+        Search with relevance filtering
         
-        # Map vague queries to retrieval-friendly scientific-paper sections
-        # Keep enhancements specific enough to hit real sections across most PDFs
-        query_enhancements = {
-            # Summaries
-            "provide a comprehensive summary": "abstract introduction conclusion",
-            "summarize": "abstract introduction conclusion",
-            "summary": "abstract introduction conclusion",
-            
-            # Key points / topics
-            "what are the key points": "conclusion key findings",
-            "key points": "conclusion key findings",
-            "what are the main topics": "introduction overview",
-            "main topics": "introduction overview",
-            
-            # Details  
-            "give detailed information": "method methodology results",
-            "details": "method methodology results",
-            
-            # Tables/Figures
-            "explain table": "table",
-            "explain figure": "figure",
-            "explain diagram": "figure diagram",
-            "table 1": "table 1",
-            "figure 1": "figure 1",
-        }
+        Args:
+            query: Search query
+            limit: Max results to return
+            filename: Optional filename filter
+            min_score: Minimum relevance score (0.0-1.0)
         
-        query_lower = query.lower().strip()
-        
-        # Check for enhanced queries
-        for pattern, enhancement in query_enhancements.items():
-            if pattern in query_lower:
-                logger.info(f"Enhancing query: '{query}' -> '{enhancement}'")
-                return enhancement
-        
-        return query
-
-
-    def search(self, query: str, limit: int = 5, filename: Optional[str] = None, min_score: float = 0.3 ) -> List[Dict[str, Any]]: # LOWERED from 0.5 for better recall
-        """Search with improved parameters"""
+        Returns:
+            Filtered list of relevant results
+        """
         try:
-            logger.info(f"Searching for: '{query}' (limit={limit}, min_score={min_score})")
+            logger.info(f"Searching: '{query}' (min_score={min_score})")
             
-            # Generate query embedding
+            # Generate embedding
             query_embedding = self.embedding_gen.generate_embedding(query)
             
-            # Build filter (pass through to vectorstore which turns this into a Qdrant Filter)
+            # Build filter
             filter_dict = None
             if filename:
                 filter_dict = {"filename": filename}
                 logger.info(f"Filtering by filename: {filename}")
             
-            # IMPROVED: Get more results initially for filtering
+            # Search with 3x results for filtering
             all_results = self.vector_store.search(
                 query_embedding=query_embedding,
-                limit=limit * 3,  # Get 3x for filtering
+                limit=limit * 3,
                 filter_dict=filter_dict
             )
             
-            logger.info(f"Vector search returned {len(all_results)} results")
+            logger.info(f"Initial results: {len(all_results)}")
             
-            # Filter by score and deduplicate
-            seen_content = set()
-            filtered_results = []
+            # Log actual scores for debugging
+            if all_results:
+                scores = [r['score'] for r in all_results]
+                logger.info(f"Score range: {min(scores):.4f} - {max(scores):.4f}")
+                logger.info(f"Top 5 scores: {[f'{s:.4f}' for s in sorted(scores, reverse=True)[:5]]}")
             
-            for result in all_results:
-                content = result['payload']['content']
-                score = result['score']
-                
-                # Skip if score too low
-                if score < min_score:
-                    continue
-                
-                # Skip similar/duplicate content  
-                content_hash = content[:100]  # First 100 chars as hash
-                if content_hash in seen_content:
-                    logger.debug(f"Skipping duplicate content (score: {score:.3f})")
-                    continue
-                
-                seen_content.add(content_hash)
-                filtered_results.append(result)
-                
-                logger.debug(f"Added result: {result['payload']['filename']} p{result['payload']['page_number']} (score: {score:.3f})")
-                
-                if len(filtered_results) >= limit:
-                    break
+            # Filter by relevance score
+            filtered_results = [
+                r for r in all_results 
+                if r['score'] >= min_score
+            ][:limit]
             
-            logger.info(f"Final filtered results: {len(filtered_results)}")
+            if not filtered_results:
+                logger.warning(f"No results above threshold {min_score}")
+                # Return top results even if below threshold for debugging
+                logger.info("Returning top results below threshold for debugging")
+                return all_results[:limit]
+            
+            logger.info(f"Filtered to {len(filtered_results)} relevant results")
             return filtered_results
             
         except Exception as e:
-            logger.error(f"Search error: {str(e)}")
-            raise VectorStoreError(f"Search failed: {str(e)}", sys)
-
+            logger.error(f"Search failed: {str(e)}")
+            raise QueryError(f"Search failed: {str(e)}", sys)
     
-    def get_context_for_query(self, query: str, limit: int = 5,filename: Optional[str] = None) -> str:
-        """Get context with query enhancement"""
-        
-        # ENHANCED: Boost search for broad questions
-        enhanced_query = self.enhance_query(query)
-        
-        # For broad questions, get more results
-        search_limit = limit
-        if enhanced_query != query:
-            search_limit = min(limit * 2, 10)  # Double the results for enhanced queries
-            logger.info(f"Using enhanced search with limit: {search_limit}")
-        
-        results = self.search(enhanced_query, limit=search_limit, filename=filename)
-        
-        if not results:
-            # Try original query if enhanced didn't work
-            if enhanced_query != query:
-                logger.info("Enhanced search failed, trying original query")
-                results = self.search(query, limit=limit, filename=filename)
+    def get_context_for_query(
+        self,
+        query: str,
+        limit: int = 5,
+        filename: Optional[str] = None,
+        min_score: float = 0.1
+    ) -> str:
+        """Get context with relevance filtering"""
+        try:
+            results = self.search(query, limit=limit, filename=filename, min_score=min_score)
             
             if not results:
                 return "No relevant context found in the documents."
-        
-        # Build context with better structure
-        context_parts = []
-        
-        for idx, result in enumerate(results):
-            payload = result['payload']
             
-            context_parts.append(
-                f"[Source {idx + 1} - {payload['filename']}, Page {payload['page_number']}]\n"
-                f"{payload['content']}\n"
-            )
-        
-        full_context = "\n---\n\n".join(context_parts)
-        logger.info(f"Built context from {len(results)} sources, {len(full_context)} chars")
-        
-        return full_context
-
+            # Build context
+            context_parts = []
+            for idx, result in enumerate(results):
+                payload = result['payload']
+                context_parts.append(
+                    f"[Source {idx + 1} - {payload['filename']}, Page {payload['page_number']}]\n"
+                    f"{payload['content']}\n"
+                )
+            
+            context = "\n---\n\n".join(context_parts)
+            logger.info(f"Built context: {len(context)} chars from {len(results)} sources")
+            
+            return context
+            
+        except Exception as e:
+            logger.error(f"Context retrieval failed: {str(e)}")
+            raise QueryError(f"Failed to get context: {str(e)}", sys)

@@ -22,6 +22,37 @@ class ChatService:
         self.query_service = QueryService()
         logger.info("ChatService initialized (multimodal + vision)")
     
+    def _extract_search_terms(self, query: str) -> str:
+        """Extract key search terms from user query"""
+        # Remove common stop words and extract meaningful terms
+        stop_words = {
+            'create', 'a', 'comprehensive', 'summary', 'of', 'the', 'document', 'including',
+            'main', 'topics', 'and', 'themes', 'discussed', 'key', 'findings', 'arguments',
+            'or', 'claims', 'important', 'data', 'examples', 'evidence', 'presented',
+            'conclusions', 'recommendations', 'organize', 'your', 'with', 'clear', 'headers',
+            'bullet', 'points', 'cite', 'page', 'numbers', 'what', 'is', 'about', 'tell', 'me',
+            'can', 'you', 'please', 'help', 'me', 'understand', 'explain', 'describe'
+        }
+        
+        # Split query into words and filter
+        words = query.lower().split()
+        key_terms = [word for word in words if word not in stop_words and len(word) > 2]
+        
+        # If no key terms found, try to extract meaningful phrases
+        if not key_terms:
+            # Look for common patterns
+            if 'summary' in query.lower():
+                return 'summary overview main topics'
+            elif 'about' in query.lower():
+                return 'about main topics content'
+            elif 'explain' in query.lower():
+                return 'explain main concepts'
+            else:
+                return query
+        
+        # Return top 5-10 key terms
+        return ' '.join(key_terms[:10])
+    
     def chat(
         self,
         query: str,
@@ -43,24 +74,59 @@ class ChatService:
             start_time = time.time()
             
             if use_rag:
-                # Search for relevant content
-                logger.info(f"Searching for: '{query}'")
+                # Create a simpler search query for better retrieval
+                # Extract key terms from the user query
+                search_query = self._extract_search_terms(query)
+                logger.info(f"Searching for: '{search_query}' (from: '{query}')")
                 results = self.query_service.search(
-                    query,
+                    search_query,
                     limit=8,  # Get more results for multimodal
                     filename=filename
                 )
+                
+                # If no results, try a broader search
+                if not results:
+                    logger.info("No results found, trying broader search...")
+                    broader_queries = [
+                        "main topics content",
+                        "introduction overview",
+                        "abstract summary",
+                        "key concepts"
+                    ]
+                    
+                    for broader_query in broader_queries:
+                        results = self.query_service.search(
+                            broader_query,
+                            limit=8,
+                            filename=filename
+                        )
+                        if results:
+                            logger.info(f"Found results with broader query: '{broader_query}'")
+                            break
+                
+                # Final fallback: get any content from the document
+                if not results:
+                    logger.info("No results found with any query, getting any content from document...")
+                    results = self.query_service.search(
+                        "content text",
+                        limit=5,
+                        filename=filename
+                    )
                 
                 # Separate text and images
                 text_parts = []
                 images_base64 = []
                 sources = []
                 
+                logger.info(f"Retrieved {len(results)} results from search")
+                
                 for result in results:
                     payload = result['payload']
                     content_type = payload.get('content_type', 'text')
                     
                     if content_type == 'text':
+                        content_preview = payload['content'][:100] + "..." if len(payload['content']) > 100 else payload['content']
+                        logger.info(f"Text chunk from {payload['filename']} page {payload['page_number']}: {content_preview}")
                         text_parts.append(
                             f"[Page {payload['page_number']}]\n{payload['content']}"
                         )
