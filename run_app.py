@@ -5,6 +5,7 @@ import subprocess
 import sys
 import os
 from pathlib import Path
+from src.ui import app
 
 def run_app():
     """Run the Streamlit application"""
