@@ -9,6 +9,7 @@ description = "Multimodal PDF chat with RAG - 100% FREE"
 readme = "README.md"
 requires-python = ">=3.9"
 license = {text = "MIT"}
+package-mode = false
 
 [tool.black]
 line-length = 100
