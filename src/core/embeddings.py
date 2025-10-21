@@ -33,20 +33,22 @@ class EmbeddingGenerator:
         except Exception as e:
             raise EmbeddingError(f"Embedding failed: {str(e)}", sys)
     
-    def generate_embeddings_batch(self, texts: List[str]) -> List[List[float]]:
+    def generate_embeddings_batch(self, texts: List[str], batch_size: int = 32) -> List[List[float]]:
         """Generate batch embeddings - PARALLEL PROCESSING"""
-        try:
-            logger.info(f"Generating {len(texts)} embeddings in parallel...")
-            embeddings = self.model.encode(
-                texts,
-                convert_to_numpy=True,
-                show_progress_bar=True,
-                batch_size=32  # Process 32 at once
-            )
-            logger.info(f"✅ Generated {len(embeddings)} embeddings")
-            return embeddings.tolist()
-        except Exception as e:
-            raise EmbeddingError(f"Batch embedding failed: {str(e)}", sys)
+        all_embeddings = []
+        total = len(texts)
+        
+        for i in range(0, total, batch_size):
+            batch = texts[i:i + batch_size]
+            try:
+                batch_embeddings = self.model.encode(batch)
+                all_embeddings.extend(batch_embeddings)
+                logger.info(f"Processed {min(i + batch_size, total)}/{total} embeddings")
+            except Exception as e:
+                logger.error(f"Failed to process batch {i//batch_size}: {str(e)}")
+                raise EmbeddingError(f"Batch processing failed at {i}: {str(e)}")
+        
+        return all_embeddings
     
     def test_connection(self) -> bool:
         """Test embeddings"""

@@ -209,3 +209,35 @@ class VectorStoreManager:
         except Exception as e:
             logger.error(f"Connection test failed: {str(e)}")
             return False
+    
+    def add_multimodal_points(self, embeddings: List[List[float]], payloads: List[Dict[str, Any]]) -> bool:
+        """Add multimodal vectors (text embeddings + image base64 in payload)"""
+        try:
+            if not embeddings or not payloads:
+                logger.error("No embeddings or payloads")
+                return False
+            
+            if len(embeddings) != len(payloads):
+                logger.error(f"Mismatch: {len(embeddings)} embeddings != {len(payloads)} payloads")
+                return False
+            
+            points = []
+            for embedding, payload in zip(embeddings, payloads):
+                point_id = str(uuid.uuid4())
+                points.append(PointStruct(
+                    id=point_id,
+                    vector=embedding,
+                    payload=payload  # Can include image_base64!
+                ))
+            
+            self.client.upsert(
+                collection_name=self.collection_name,
+                points=points
+            )
+            
+            logger.info(f"✅ Added {len(points)} multimodal points to Qdrant")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Failed to add multimodal points: {str(e)}")
+            raise VectorStoreError(f"Failed to add points: {str(e)}", sys)

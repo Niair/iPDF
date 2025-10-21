@@ -152,6 +152,7 @@ class MultimodalProcessor:
         Returns:
             ProcessingResult with all elements
         """
+        doc = None
         try:
             logger.info("=" * 80)
             logger.info(f"MULTIMODAL PROCESSING: {filename}")
@@ -292,3 +293,9 @@ class MultimodalProcessor:
             import traceback
             logger.error(traceback.format_exc())
             return ProcessingResult(False, [], error)
+        
+        # In PDFService.process_and_index_pdf
+        for element in result.elements:
+            if element.content_type == "text":
+                text = element.content  # Could be very large
+                # No memory limit check

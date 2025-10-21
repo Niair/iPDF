@@ -43,7 +43,7 @@ def inject_global_styles():
 
 # ==================== SESSION STATE ====================
 def initialize_session_state():
-    """Initialize session state"""
+    """Initialize session state with all required variables"""
     defaults = {
         'initialized': False,
         'pdf_service': None,
@@ -52,27 +52,30 @@ def initialize_session_state():
         'processed_files': [],
         'current_pdf': None,
         'chat_history': [],
-        'services_ready': False,
-        'llm_provider': 'groq',
-        'processing_log': []  # NEW: Store processing logs
+        'services_ready': False
     }
     
+    # Initialize all defaults
     for key, value in defaults.items():
         if key not in st.session_state:
             st.session_state[key] = value
     
+    # Initialize services once
     if not st.session_state.initialized:
         try:
+            from services.pdf_service import PDFService
+            from services.chat_service import ChatService
+            
             st.session_state.pdf_service = PDFService()
-            st.session_state.chat_service = ChatService(
-                llm_provider=st.session_state.llm_provider
-            )
+            st.session_state.chat_service = ChatService()  # Uses Gemini Vision
             st.session_state.initialized = True
             st.session_state.services_ready = True
-            logger.info("Services initialized")
+            logger.info("✅ Multimodal services initialized (Gemini Vision)")
+            
         except Exception as e:
-            logger.error(f"Init failed: {str(e)}")
+            logger.error(f"Service initialization failed: {str(e)}")
             st.session_state.services_ready = False
+            st.error(f"❌ Failed to initialize services: {str(e)}")
 
 
 # ==================== PDF FUNCTIONS ====================
@@ -103,7 +106,7 @@ def get_pdf_page_count(pdf_path: str) -> int:
 
 # ==================== SIDEBAR ====================
 def render_sidebar():
-    """Render sidebar with model switcher"""
+    """Render sidebar"""
     with st.sidebar:
         st.header("📁 Upload PDFs")
         
@@ -123,45 +126,11 @@ def render_sidebar():
         
         st.divider()
         
-        # MODEL SELECTOR - NEW!
-        st.subheader("🤖 AI Model")
-        
-        selected_model = st.selectbox(
-            "Choose AI Model for Answers",
-            options=["google", "groq"],
-            format_func=lambda x: "🔵 Google Gemini (Recommended)" if x == "google" else "🟢 Groq Llama",
-            key="model_selector"
-        )
-        
-        # Update chat service if model changed
-        if selected_model != st.session_state.get('current_model', 'google'):
-            st.session_state.current_model = selected_model
-            try:
-                st.session_state.chat_service = ChatService(llm_provider=selected_model)
-                st.success(f"✅ Now using {selected_model.upper()}")
-            except Exception as e:
-                st.error(f"❌ Failed to switch: {str(e)}")
-        
-        # Show current model
-        st.caption(f"Currently using: **{st.session_state.get('current_model', 'google').upper()}**")
-        
-        st.divider()
-        
-        # Settings
+        # Settings - SIMPLIFIED (remove provider switcher since we only use Gemini Vision now)
         st.subheader("⚙️ Settings")
-        provider = st.selectbox(
-            "AI Provider",
-            options=["groq", "gemini"],
-            index=0
-        )
         
-        if provider != st.session_state.llm_provider:
-            st.session_state.llm_provider = provider
-            try:
-                st.session_state.chat_service = ChatService(llm_provider=provider)
-                st.success(f"✅ Switched to {provider.upper()}")
-            except Exception as e:
-                st.error(f"Failed: {str(e)}")
+        st.caption("Using: **Google Gemini Vision** (Multimodal)")
+        st.caption("Supports: Text + Images + Tables + Diagrams")
         
         st.divider()
         
@@ -182,32 +151,6 @@ def render_sidebar():
         
         if st.button("🗑️ Clear All", use_container_width=True):
             clear_all()
-        
-        st.divider()
-        
-        # Status
-        st.subheader("📊 Status")
-        
-        try:
-            llm = LLMHandler(provider="groq")
-            if llm.test_connection():
-                st.success("✅ Groq API")
-            else:
-                st.error("❌ Groq API")
-        except:
-            st.error("❌ Groq API")
-        
-        try:
-            vs = VectorStoreManager()
-            if vs.test_connection():
-                st.success("✅ Qdrant DB")
-            else:
-                st.error("❌ Qdrant DB")
-        except:
-            st.error("❌ Qdrant DB")
-        
-        st.info(f"📄 {len(st.session_state.processed_files)} documents")
-
 
 # ==================== PDF PROCESSING WITH DETAILED FEEDBACK ====================
 def process_pdfs(uploaded_files):
